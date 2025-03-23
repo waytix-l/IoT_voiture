@@ -4,34 +4,33 @@ from machine import Pin, PWM, time_pulse_us
 import network
 import espnow
 
-# Activer Wi-Fi en mode station
 sta = network.WLAN(network.STA_IF)
 sta.active(True)
 
-# Initialiser ESP-NOW
 esp = espnow.ESPNow()
 esp.active(True)
 
-# Définition des broches ESP32 pour le contrôle du driver moteur
 MOTOR_LEFT_FORWARD = PWM(Pin(25), freq=1000)
 MOTOR_LEFT_BACKWARD = PWM(Pin(26), freq=1000)
 MOTOR_RIGHT_FORWARD = PWM(Pin(32), freq=1000)
 MOTOR_RIGHT_BACKWARD = PWM(Pin(33), freq=1000)
 
-# Configuration du capteur HC-SR04
 TRIGGER_PIN = Pin(27, Pin.OUT)
 ECHO_PIN = Pin(13, Pin.IN)
 
-# Constantes
-DISTANCE_OBSTACLE = 15  # Distance en cm pour détecter un obstacle
-CHECK_INTERVAL = 0.05   # Vérification toutes les 50ms
+DISTANCE_OBSTACLE = 15
+CHECK_INTERVAL = 0.05
 
-# Variables globales pour le multithreading
 obstacle_detected = False
-running = True  # Permet de stopper proprement le thread
+running = True
 
-# Fonction pour mesurer la distance avec le capteur HC-SR04
 def mesurer_distance():
+    """
+    Mesure la distance avec le capteur HC-SR04.
+    
+    Returns:
+        float: Distance en centimètres. Retourne une valeur infinie en cas d'erreur ou de timeout.
+    """
     TRIGGER_PIN.value(0)
     time.sleep_us(2)
     TRIGGER_PIN.value(1)
@@ -39,75 +38,124 @@ def mesurer_distance():
     TRIGGER_PIN.value(0)
     
     try:
-        duree = time_pulse_us(ECHO_PIN, 1, 30000)  # Timeout de 30ms
+        duree = time_pulse_us(ECHO_PIN, 1, 30000)
         if duree < 0:
-            return float('inf')  # Valeur infinie si timeout
+            return float('inf')
         
         distance = (duree / 2) / 29.1
         return distance
     except:
         return float('inf')
 
-# Thread de surveillance des obstacles
 def surveiller_obstacles():
+    """
+    Thread de surveillance en continu des obstacles.
+    Met à jour la variable globale obstacle_detected selon la distance détectée.
+    S'exécute jusqu'à ce que la variable running soit mise à False.
+    """
     global obstacle_detected, running
     while running:
         distance = mesurer_distance()
         if distance < DISTANCE_OBSTACLE:
             if not obstacle_detected:
-                print("🚨 Obstacle détecté ! Arrêt du véhicule.")
+                print("Obstacle détecté ! Arrêt du véhicule.")
             obstacle_detected = True
         else:
             if obstacle_detected:
-                print("✅ Obstacle retiré. Reprise du mouvement.")
+                print("Obstacle retiré. Reprise du mouvement.")
             obstacle_detected = False
         time.sleep(CHECK_INTERVAL)
 
-# Fonctions de contrôle des moteurs
 def avancer(vitesse=65535):
+    """
+    Fait avancer le véhicule en ligne droite.
+    
+    Args:
+        vitesse (int): Valeur PWM pour la vitesse des moteurs (0-65535).
+    """
     MOTOR_LEFT_FORWARD.duty_u16(vitesse)
     MOTOR_LEFT_BACKWARD.duty_u16(0)
     MOTOR_RIGHT_FORWARD.duty_u16(vitesse)
     MOTOR_RIGHT_BACKWARD.duty_u16(0)
 
 def reculer(vitesse=65535):
+    """
+    Fait reculer le véhicule en ligne droite.
+    
+    Args:
+        vitesse (int): Valeur PWM pour la vitesse des moteurs (0-65535).
+    """
     MOTOR_LEFT_FORWARD.duty_u16(0)
     MOTOR_LEFT_BACKWARD.duty_u16(vitesse)
     MOTOR_RIGHT_FORWARD.duty_u16(0)
     MOTOR_RIGHT_BACKWARD.duty_u16(vitesse)
 
 def tourner_gauche(vitesse=65535):
+    """
+    Fait tourner le véhicule vers la gauche sur place.
+    
+    Args:
+        vitesse (int): Valeur PWM pour la vitesse des moteurs (0-65535).
+    """
     MOTOR_LEFT_FORWARD.duty_u16(vitesse)
     MOTOR_LEFT_BACKWARD.duty_u16(0)
     MOTOR_RIGHT_FORWARD.duty_u16(0)
     MOTOR_RIGHT_BACKWARD.duty_u16(vitesse)
 
 def tourner_droite(vitesse=65535):
+    """
+    Fait tourner le véhicule vers la droite sur place.
+    
+    Args:
+        vitesse (int): Valeur PWM pour la vitesse des moteurs (0-65535).
+    """
     MOTOR_LEFT_FORWARD.duty_u16(0)
     MOTOR_LEFT_BACKWARD.duty_u16(vitesse)
     MOTOR_RIGHT_FORWARD.duty_u16(vitesse)
     MOTOR_RIGHT_BACKWARD.duty_u16(0)
 
 def avancer_gauche(vitesse=65535, tournant=32768, tournant_fort=0):
+    """
+    Fait avancer le véhicule en tournant vers la gauche.
+    
+    Args:
+        vitesse (int): Valeur PWM pour la vitesse du moteur principal (0-65535).
+        tournant (int): Valeur PWM réduite pour le moteur secondaire (0-65535).
+        tournant_fort (int): Valeur PWM pour accentuer le virage si nécessaire (0-65535).
+    """
     MOTOR_LEFT_FORWARD.duty_u16(vitesse)
     MOTOR_LEFT_BACKWARD.duty_u16(0)
     MOTOR_RIGHT_FORWARD.duty_u16(tournant)
     MOTOR_RIGHT_BACKWARD.duty_u16(tournant_fort)
 
 def avancer_droite(vitesse=65535, tournant=32768, tournant_fort=0):
+    """
+    Fait avancer le véhicule en tournant vers la droite.
+    
+    Args:
+        vitesse (int): Valeur PWM pour la vitesse du moteur principal (0-65535).
+        tournant (int): Valeur PWM réduite pour le moteur secondaire (0-65535).
+        tournant_fort (int): Valeur PWM pour accentuer le virage si nécessaire (0-65535).
+    """
     MOTOR_LEFT_FORWARD.duty_u16(tournant)
     MOTOR_LEFT_BACKWARD.duty_u16(tournant_fort)
     MOTOR_RIGHT_FORWARD.duty_u16(vitesse)
     MOTOR_RIGHT_BACKWARD.duty_u16(0)
 
 def stop():
+    """
+    Arrête tous les moteurs du véhicule.
+    """
     MOTOR_LEFT_FORWARD.duty_u16(0)
     MOTOR_LEFT_BACKWARD.duty_u16(0)
     MOTOR_RIGHT_FORWARD.duty_u16(0)
     MOTOR_RIGHT_BACKWARD.duty_u16(0)
 
-# Fonction principale de la course avec vérification en thread
 def course():
+    """
+    Exécute une séquence prédéfinie de mouvements formant un parcours.
+    S'interrompt et reprend en cas de détection d'obstacle.
+    """
     global obstacle_detected
     mouvements = [
         (avancer, [65535], 0.9),
@@ -135,44 +183,44 @@ def course():
         while time.time() - temps_debut < duree:
             if obstacle_detected:
                 stop()
-                print("⏸️ Pause... Attente que l'obstacle disparaisse.")
+                print("Pause... Attente que l'obstacle disparaisse.")
                 while obstacle_detected:
-                    time.sleep(0.1)  # Réduit la consommation CPU
-                print("▶️ Reprise du mouvement.")
-                mouvement(*args)  # Reprendre le mouvement
-                temps_debut = time.time()  # Recalcule le temps restant
+                    time.sleep(0.1)
+                print("Reprise du mouvement.")
+                mouvement(*args)
+                temps_debut = time.time()
         
-        stop()  # Assure un arrêt après chaque mouvement
+        stop()
     
-    print("🏁 Course terminée !")
+    print("Course terminée !")
 
-# Fonction principale
 def main():
+    """
+    Fonction principale du programme.
+    Initialise le système, vérifie l'absence d'obstacles,
+    lance le thread de surveillance et exécute la course.
+    """
     global running
     try:
-        print("🟢 Démarrage de la voiture ESP32")
+        print("Démarrage de la voiture ESP32")
 
-        # Vérifier qu'aucun obstacle n'est détecté au départ
         distance = mesurer_distance()
         if distance < DISTANCE_OBSTACLE:
-            print("🔴 Obstacle détecté avant le départ ! Attente...")
+            print("Obstacle détecté avant le départ ! Attente...")
             while distance < DISTANCE_OBSTACLE:
                 distance = mesurer_distance()
                 time.sleep(0.05)
-            print("🟢 Départ !")
+            print("Départ")
 
-        # Lancer le thread **seulement si nécessaire**
         _thread.start_new_thread(surveiller_obstacles, ())
 
-        # Exécuter la course
         course()
         
     except KeyboardInterrupt:
-        print("⛔ Programme interrompu.")
+        print("Programme interrompu.")
     finally:
-        running = False  # Arrête proprement le thread
+        running = False
         stop()
 
-# Lancer le programme
 main()
-print("🚗 Programme terminé.")
+print("Programme terminé.")

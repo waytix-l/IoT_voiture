@@ -4,23 +4,29 @@ from machine import Pin, PWM, time_pulse_us
 import network
 import espnow
 
+# Initialisation du WiFi en mode station
 sta = network.WLAN(network.STA_IF)
 sta.active(True)
 
+# Initialisation d'ESP-NOW
 esp = espnow.ESPNow()
 esp.active(True)
 
+# Configuration des broches pour les moteurs
 MOTOR_LEFT_FORWARD = PWM(Pin(25), freq=1000)
 MOTOR_LEFT_BACKWARD = PWM(Pin(26), freq=1000)
 MOTOR_RIGHT_FORWARD = PWM(Pin(32), freq=1000)
 MOTOR_RIGHT_BACKWARD = PWM(Pin(33), freq=1000)
 
+# Configuration du capteur ultrasonique HC-SR04
 TRIGGER_PIN = Pin(27, Pin.OUT)
 ECHO_PIN = Pin(13, Pin.IN)
 
-DISTANCE_OBSTACLE = 15
-CHECK_INTERVAL = 0.05
+# Constantes pour la détection d'obstacles
+DISTANCE_OBSTACLE = 15  # Distance en cm
+CHECK_INTERVAL = 0.05   # Intervalle de vérification en secondes
 
+# Variables globales pour le multithreading
 obstacle_detected = False
 running = True
 
@@ -38,10 +44,11 @@ def mesurer_distance():
     TRIGGER_PIN.value(0)
     
     try:
-        duree = time_pulse_us(ECHO_PIN, 1, 30000)
+        duree = time_pulse_us(ECHO_PIN, 1, 30000)  # Timeout de 30ms
         if duree < 0:
             return float('inf')
         
+        # Conversion du temps en distance (cm)
         distance = (duree / 2) / 29.1
         return distance
     except:
@@ -157,6 +164,7 @@ def course():
     S'interrompt et reprend en cas de détection d'obstacle.
     """
     global obstacle_detected
+    # Séquence de mouvements: (fonction, [arguments], durée en secondes)
     mouvements = [
         (avancer, [65535], 0.9),
         (avancer_droite, [65535], 0.55),
@@ -180,17 +188,18 @@ def course():
         mouvement(*args)
         temps_debut = time.time()
         
+        # Surveille les obstacles pendant l'exécution de chaque mouvement
         while time.time() - temps_debut < duree:
             if obstacle_detected:
                 stop()
                 print("Pause... Attente que l'obstacle disparaisse.")
                 while obstacle_detected:
-                    time.sleep(0.1)
+                    time.sleep(0.1)  # Réduit la consommation CPU pendant l'attente
                 print("Reprise du mouvement.")
-                mouvement(*args)
-                temps_debut = time.time()
+                mouvement(*args)  # Reprend le mouvement interrompu
+                temps_debut = time.time()  # Réinitialise le chronomètre
         
-        stop()
+        stop()  # Arrêt après chaque mouvement
     
     print("Course terminée !")
 
@@ -204,23 +213,27 @@ def main():
     try:
         print("Démarrage de la voiture ESP32")
 
+        # Vérification d'obstacle avant le départ
         distance = mesurer_distance()
         if distance < DISTANCE_OBSTACLE:
             print("Obstacle détecté avant le départ ! Attente...")
             while distance < DISTANCE_OBSTACLE:
                 distance = mesurer_distance()
                 time.sleep(0.05)
-            print("Départ")
+            print("Départ !")
 
+        # Démarrage du thread de surveillance des obstacles
         _thread.start_new_thread(surveiller_obstacles, ())
 
+        # Exécution du parcours
         course()
         
     except KeyboardInterrupt:
         print("Programme interrompu.")
     finally:
-        running = False
-        stop()
+        running = False  # Arrête proprement le thread
+        stop()  # Arrête les moteurs
 
+# Point d'entrée du programme
 main()
 print("Programme terminé.")
